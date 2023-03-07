@@ -1,3 +1,3 @@
-# Slices Div Help - PL
+# Slices Correction Help - PL
 
 

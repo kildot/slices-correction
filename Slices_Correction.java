@@ -9,7 +9,7 @@ import java.util.*;
 
 import javax.swing.SwingUtilities;
 
-public class Slices_Div implements PlugIn, RoiListener, DialogListener {
+public class Slices_Correction implements PlugIn, RoiListener, DialogListener {
 
 	static final int MAX_PROFILE_PLOTS = 25;
 
@@ -1130,5 +1130,5 @@ public class Slices_Div implements PlugIn, RoiListener, DialogListener {
 		}
 	}
 
-	static private String helpText = "https://kildot.github.io/slices-div/help/";
+	static private String helpText = "https://kildot.github.io/slices-correction/help/";
 }
