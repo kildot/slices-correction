@@ -631,10 +631,10 @@ public class Slices_Correction implements PlugIn, RoiListener, DialogListener {
 	private double[] showDialog() {
 		logMethod();
 		GenericDialog dialog = new GenericDialog("Parameters");
-		dialog.addStringField("gl_0:", Double.toString(prevNumbers[0]), 20);
-		dialog.addStringField("gl_step:", Double.toString(prevNumbers[1]), 20);
-		dialog.addStringField("t_0:", Double.toString(prevNumbers[2]), 20);
-		dialog.addStringField("_step:", Double.toString(prevNumbers[3]), 20);
+		dialog.addStringField("First depth:", Double.toString(prevNumbers[0]), 20);
+		dialog.addStringField("Slice thick:", Double.toString(prevNumbers[1]), 20);
+		dialog.addStringField("Time 0", Double.toString(prevNumbers[2]), 20);
+		dialog.addStringField("Time:", Double.toString(prevNumbers[3]), 20);
 		dialog.showDialog();
 		if (dialog.wasCanceled()) {
 			return null;
