@@ -79,32 +79,31 @@ public class Slices_Correction implements PlugIn, RoiListener, DialogListener {
 		sourceImage = IJ.getImage();
 		ImageStack stack = sourceImage.getStack();
 		int count = stack != null ? stack.size() : 1;
-		String text = showDialog(count);
-		if (text == null) {
+		double[] numbers = showDialog();
+		if (numbers == null) {
 			return;
-		}
-		String[] strings = splitParams(text);
-		double[] numbers = new double[strings.length];
-		if (numbers.length != count) {
-			IJ.log("Invalid number of values " + numbers.length + ", expected " + count);
-			return;
-		}
-		for (int i = 0; i < strings.length; i++) {
-			try {
-				numbers[i] = Double.parseDouble(strings[i]);
-			} catch (Exception ex) {
-				IJ.log("Invalid value at position " + (i + 1));
-				return;
-			}
 		}
 		for (int i = 0; i < count; i++) {
 			ImageProcessor ip = stack != null ? stack.getProcessor(i + 1) : sourceImage.getProcessor();
-			divImage(ip, numbers[i]);
+			divImage(ip, numbers, i);
 		}
 		sourceImage.updateAndDraw();
 	}
 
-	private void divImage(ImageProcessor ip, double number) {
+	private void divImage(ImageProcessor ip, double[] numbers, int index) {
+
+		double div = 1.0;
+
+		double gl0 = numbers[0];
+		double step_gl0 = numbers[1];
+		double gl = gl0 + (double)index * step_gl0;
+		div *= Math.exp(-0.015 * gl);
+
+		double t0 = numbers[2];
+		double step_t0 = numbers[3];
+		double t = t0 + (double)index * step_t0;
+		div *= 0.765 * Math.exp(-t / 443.85) + 0.235;
+
 		double black = ip.getMin();
 		double white = ip.getMax();
 		int width = ip.getWidth();
@@ -115,7 +114,7 @@ public class Slices_Correction implements PlugIn, RoiListener, DialogListener {
 			for (int y = 0; y < height; y++) {
 				for (int x = 0; x < width; x++) {
 					double v = (double)((int)px[x + width * y] & 0xFFFF);
-					v = (v - black) / number + black;
+					v = (v - black) / div + black;
 					px[x + width * y] = (short)(0.5 + Math.max(black, Math.min(white, Math.round(v))));
 				}
 			}
@@ -627,16 +626,26 @@ public class Slices_Correction implements PlugIn, RoiListener, DialogListener {
 		return ((Choice) dialog.getChoices().get(id)).getSelectedIndex();
 	}
 
-	private String showDialog(int slicesCount) {
+	static double[] prevNumbers = new double[]{0.0, 0.0, 0.0, 0.0};
+
+	private double[] showDialog() {
 		logMethod();
 		GenericDialog dialog = new GenericDialog("Parameters");
-		dialog.addStringField("List of " + slicesCount + " values:", "", 30);
+		dialog.addStringField("gl_0:", Double.toString(prevNumbers[0]), 20);
+		dialog.addStringField("gl_step:", Double.toString(prevNumbers[1]), 20);
+		dialog.addStringField("t_0:", Double.toString(prevNumbers[2]), 20);
+		dialog.addStringField("_step:", Double.toString(prevNumbers[3]), 20);
 		dialog.showDialog();
 		if (dialog.wasCanceled()) {
 			return null;
 		}
 		Vector<TextField> vect = dialog.getStringFields();
-		return vect.get(0).getText();
+		double[] results = prevNumbers;
+		results[0] = Double.parseDouble(vect.get(0).getText().trim().replace(',', '.'));
+		results[1] = Double.parseDouble(vect.get(1).getText().trim().replace(',', '.'));
+		results[2] = Double.parseDouble(vect.get(2).getText().trim().replace(',', '.'));
+		results[3] = Double.parseDouble(vect.get(3).getText().trim().replace(',', '.'));
+		return results;
 	}
 
 	private void closed() {
