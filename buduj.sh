@@ -13,13 +13,13 @@ fi
 
 mkdir -p build
 mkdir -p dist
-${JDK_PATH}javac -encoding utf8 -cp ${FIJI_PATH}jars/ij-1.*.jar -d build Points_Detector.java
+${JDK_PATH}javac -encoding utf8 -cp ${FIJI_PATH}jars/ij-1.*.jar -d build Slices_Div.java
 cd build
-${JDK_PATH}jar cvf ../dist/Points_Detector.jar ../plugins.config Points_Detector*.class
+${JDK_PATH}jar cvf ../dist/Slices_Div.jar ../plugins.config Slices_Div*.class
 cd ..
 
 if [ "$3" = "run" ]; then
-	cp -f dist/Points_Detector.jar ${FIJI_PATH}plugins/
+	cp -f dist/Slices_Div.jar ${FIJI_PATH}plugins/
 	kill $(xprop -name "(Fiji Is Just) ImageJ" _NET_WM_PID) || echo "OK"
 	sleep 1
 	gnome-terminal --title=FijiTerm -- ${FIJI_PATH}ImageJ-linux64 test.tif &

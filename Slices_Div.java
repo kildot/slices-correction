@@ -9,7 +9,7 @@ import java.util.*;
 
 import javax.swing.SwingUtilities;
 
-public class Points_Detector implements PlugIn, RoiListener, DialogListener {
+public class Slices_Div implements PlugIn, RoiListener, DialogListener {
 
 	static final int MAX_PROFILE_PLOTS = 25;
 
@@ -77,21 +77,49 @@ public class Points_Detector implements PlugIn, RoiListener, DialogListener {
 	public void run(String arg) {
 		logMethod();
 		sourceImage = IJ.getImage();
-		if (sourceImage == null) {
-			IJ.error("Select image");
+		ImageStack stack = sourceImage.getStack();
+		int count = stack != null ? stack.size() : 1;
+		String text = showDialog(count);
+		if (text == null) {
+			return;
 		}
-		if (lastParams == null) {
-			lastParams = "20; 5; 1; 0; 2; 3";
+		String[] strings = splitParams(text);
+		double[] numbers = new double[strings.length];
+		if (numbers.length != count) {
+			IJ.log("Invalid number of values " + numbers.length + ", expected " + count);
+			return;
 		}
-		showDialog(false);
-		if (getCheckbox(MANUAL_MODE_CHECK_BOX) && !dialog.wasCanceled()) {
-			manualProcess();
+		for (int i = 0; i < strings.length; i++) {
+			try {
+				numbers[i] = Double.parseDouble(strings[i]);
+			} catch (Exception ex) {
+				IJ.log("Invalid value at position " + (i + 1));
+				return;
+			}
 		}
-		if (!dialog.wasCanceled()) {
-			imageProcess();
-			lastParams = params[0];
+		for (int i = 0; i < count; i++) {
+			ImageProcessor ip = stack != null ? stack.getProcessor(i + 1) : sourceImage.getProcessor();
+			divImage(ip, numbers[i]);
 		}
-		closed();
+		sourceImage.updateAndDraw();
+	}
+
+	private void divImage(ImageProcessor ip, double number) {
+		double black = ip.getMin();
+		double white = ip.getMax();
+		int width = ip.getWidth();
+		int height = ip.getHeight();
+		if (ip instanceof ShortProcessor) {
+			ShortProcessor processor = (ShortProcessor)ip;
+			short[] px = (short[])processor.getPixels();
+			for (int y = 0; y < height; y++) {
+				for (int x = 0; x < width; x++) {
+					double v = (double)((int)px[x + width * y] & 0xFFFF);
+					v = (v - black) / number + black;
+					px[x + width * y] = (short)(0.5 + Math.max(black, Math.min(white, Math.round(v))));
+				}
+			}
+		}
 	}
 
 	private void imageProcess() {
@@ -578,65 +606,6 @@ public class Points_Detector implements PlugIn, RoiListener, DialogListener {
 	private void manualProcess() {
 		logMethod();
 
-		// Read image
-		ImageProcessor ip = sourceImage.getProcessor();
-		ImageProcessor fp = ip.convertToFloat();
-		if (ip == fp) {
-			fp = fp.duplicate();
-		}
-		pixels = (float[]) fp.getPixels();
-		width = fp.getWidth();
-		height = fp.getHeight();
-
-		// Create helper image windows
-		pointsImage = new ImagePlus("Points selection", ip.duplicate());
-		pointsImage.show();
-		noiseImage = new ImagePlus("Noise selection", ip.duplicate());
-		noiseImage.show();
-
-		// Create preview image
-		ImageStack is = new ImageStack(width, height);
-		previewProcessor = ip.duplicate();
-		is.addSlice(previewProcessor);
-		is.addSlice(previewProcessor.duplicate());
-		previewImage = new ImagePlus("Preview", is);
-		previewImage.show();
-
-		// Create plot
-		plot = new Plot("Plot", "Neighbourhood", "Point");
-		plot.setColor(Color.BLUE);
-		plot.add("circle", new double[0], new double[0]);
-		plot.setColor(Color.RED);
-		plot.add("circle", new double[0], new double[0]);
-		plot.show();
-
-		// Create Profile plot
-		profilePlot = new Plot("Profile", "Distance from pixel", "Average value");
-		profilePlot.add("line", new double[0], new double[0]);
-		profilePlot.add("line", new double[0], new double[0]);
-		for (int i = 0; i < 2 * MAX_PROFILE_PLOTS; i++) {
-			profilePlot.add("connected circle", new double[0], new double[0]);
-		}
-		if (getCheckbox(PROFILE_WINDOW_CHECK_BOX)) {
-			profilePlotWindow = profilePlot.show();
-		}
-
-		// Listen for ROI changes
-		Roi.addRoiListener(this);
-
-		do {
-			double[] p = parseParams();
-			windowRadius = (int) (p[0] + 0.5);
-			pointRadius = (int) (p[1] + 0.5);
-			limitLineA = (float) p[2];
-			limitLineB = (float) p[3];
-			makeWindow();
-			makeHist(0, 1);
-			updatePoints(true);
-			updateNoise();
-			updatePreview();
-			showDialog(true);
-		} while (getCheckbox(MANUAL_MODE_CHECK_BOX) && !dialog.wasCanceled());
 	}
 
 	static final int ALL_SLICES_CHECK_BOX = 0;
@@ -658,70 +627,16 @@ public class Points_Detector implements PlugIn, RoiListener, DialogListener {
 		return ((Choice) dialog.getChoices().get(id)).getSelectedIndex();
 	}
 
-	private void showDialog(boolean manual) {
+	private String showDialog(int slicesCount) {
 		logMethod();
-		boolean[] initCheckBox = new boolean[] { false, false, false, false };
-		int[] initChoice = new int[] { PIXEL_OUTPUT_WHITE, PIXEL_OUTPUT_BLACK };
-		if (dialog != null) {
-			initCheckBox[0] = getCheckbox(0);
-			initCheckBox[1] = getCheckbox(1);
-			initCheckBox[2] = getCheckbox(2);
-			initCheckBox[3] = getCheckbox(3);
-			initChoice[0] = ((Choice) dialog.getChoices().get(0)).getSelectedIndex();
-			initChoice[1] = ((Choice) dialog.getChoices().get(1)).getSelectedIndex();
-			dialog.dispose();
-		}
-		dialog = new NonBlockingGenericDialog("Parameters");
-		String initialValue;
-		if (params == null) {
-			params = new String[] { "[!]", "", "", "", "", "", "" };
-			initialValue = lastParams;
-		} else {
-			initialValue = params[0];
-		}
-		String[] choiceTexts = new String[10];
-		choiceTexts[PIXEL_OUTPUT_WHITE] = "White";
-		choiceTexts[PIXEL_OUTPUT_BLACK] = "Black";
-		choiceTexts[PIXEL_OUTPUT_ORIGINAL] = "Original";
-		choiceTexts[PIXEL_OUTPUT_RESULT] = "Degree of matching";
-		choiceTexts[PIXEL_OUTPUT_NET] = "Net signal (average)";
-		choiceTexts[PIXEL_OUTPUT_NET_SCALED] = "Net signal scaled (average)";
-		choiceTexts[PIXEL_OUTPUT_NET_MODE] = "Net signal (mode)";
-		choiceTexts[PIXEL_OUTPUT_NET_SCALED_MODE] = "Net signal scaled (mode)";
-		choiceTexts[PIXEL_OUTPUT_NET_MEDIAN] = "Net signal (median)";
-		choiceTexts[PIXEL_OUTPUT_NET_SCALED_MEDIAN] = "Net signal scaled (median)";
-		dialog.addStringField("Parameters (W; R; A; B; SP; TP)", initialValue, 30);
-		dialog.addStringField("Scanning window radius [pixels](W)" + (manual ? " *" : ""), params[1], 10);
-		dialog.addStringField("Point radius [pixels] (R)", params[2], 10);
-		dialog.addStringField("Slope (A)", params[3], 10);
-		dialog.addStringField("Y-intercept (B)", params[4], 10);
-		dialog.addStringField("Skip pixels (SP)", params[5], 10);
-		dialog.addStringField("Take pixels (TP)", params[6], 10);
-		dialog.addChoice("Points color", choiceTexts, choiceTexts[initChoice[0]]);
-		dialog.addChoice("Background color", Arrays.copyOf(choiceTexts, 4), choiceTexts[initChoice[1]]);
-		dialog.addCheckbox("All slices", initCheckBox[0]);
-		dialog.addCheckbox("Keep original slices", initCheckBox[1]);
-		if (manual) {
-			dialog.addCheckbox("Manual mode - uncheck to exit manual mode", initCheckBox[2]);
-			dialog.addCheckbox("Show profile plot", initCheckBox[3]);
-		} else {
-			dialog.addCheckbox("Manual mode", initCheckBox[2]);
-		}
-		if (manual) {
-			dialog.addMessage("* - changing window radius requires pressing 'OK'");
-		}
-		dialog.addHelp(helpText);
-		updateDialog();
-		dialog.addDialogListener(this);
+		GenericDialog dialog = new GenericDialog("Parameters");
+		dialog.addStringField("List of " + slicesCount + " values:", "", 30);
 		dialog.showDialog();
+		if (dialog.wasCanceled()) {
+			return null;
+		}
 		Vector<TextField> vect = dialog.getStringFields();
-		params[0] = vect.get(0).getText();
-		params[1] = vect.get(1).getText();
-		params[2] = vect.get(2).getText();
-		params[3] = vect.get(3).getText();
-		params[4] = vect.get(4).getText();
-		params[5] = vect.get(5).getText();
-		params[6] = vect.get(6).getText();
+		return vect.get(0).getText();
 	}
 
 	private void closed() {
@@ -1189,11 +1104,8 @@ public class Points_Detector implements PlugIn, RoiListener, DialogListener {
 
 	private String[] splitParams(String p) {
 		String[] arr = p.split(";");
-		if (arr.length == 1) {
+		if ((arr.length == 1) && (p.split(",").length > 0)) {
 			arr = p.split(",");
-		}
-		if (arr.length != 6) {
-			return null;
 		}
 		for (int i = 0; i < arr.length; i++) {
 			arr[i] = arr[i].replace(",", ".").trim();
