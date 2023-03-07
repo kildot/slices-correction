@@ -1130,5 +1130,5 @@ public class Slices_Div implements PlugIn, RoiListener, DialogListener {
 		}
 	}
 
-	static private String helpText = "https://kildot.github.io/points-detector/help/";
+	static private String helpText = "https://kildot.github.io/slices-div/help/";
 }
